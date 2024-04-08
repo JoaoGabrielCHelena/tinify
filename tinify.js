@@ -1,253 +1,439 @@
-const fs = require('fs');
-const { exec } = require('child_process');
-const tinify = require("tinify");
-const path = require('path');
-const util = require('util');
-const rename = util.promisify(fs.rename);
+const fs = require('fs')
+const tinify = require("tinify")
+const path = require('path')
+const util = require('util')
+const rename = util.promisify(fs.rename)
+const commandLineUsage = require('command-line-usage')
 
 const outputFolderName = "tinifyOutput"
 const backupFolderName = "tinifyOriginalBackup"
 
-///////////////////////
-// settings
-const key = "unset";
-const mode = {name: 'webp', value:['image/webp']};
-const outputMode = "output";
-///////////////////////
-tinify.key = key;
 
+/////////////////////////////////////////////////////////////////////////
+// Values of the settings V
+/////////////////////////////////////////////////////////////////////////
+const key = "unset"
+const mode = {name: 'webp', value:['image/webp']}
+const outputMode = "output"
+///////////////////////
 
-if (process.argv[4]) {
-    console.log("Too many arguments");
-} else {
-    switch (process.argv[2]) {
-        case "-h" || "-help":
-            console.log("help text");    
-        break;
-        case "-k" || "-key":
-            Rewrite("const key", `${process.argv[3]}`,'Key has been updated.')
-        break;
-        case "-m" || "-mode":
-            modeChange()
-        break;
-        case "-s" || "-single":
-            if (key != "unset") {
-                process.argv[3] ? Run(process.argv[3]) : console.log("No file given");
-            } else { console.log("API key has not been set.\n-h or -help for help");}
-        break;
-        case "-o" || "-output":
-            if (process.argv[3] == "output" || process.argv[3] == "backup" || process.argv[3] == "direct") {
-                Rewrite("const outputMode", `${process.argv[3]}`,'Output Mode has been updated.')
-            } else if (process.argv[3] == undefined) {
-                console.log("No mode given.\nAvailable modes: output, backup, direct (not recommended)\n-h or -help for help");
-            } else {
-                console.log("Invalid output mode.\nAvailable modes: output, backup, direct (not recommended)\n-h or -help for help");
+tinify.key = key
+
+/////////////////////////////////////////////////////////////////////////
+// Texts V
+/////////////////////////////////////////////////////////////////////////
+const helpBark = "\n  -h or --help for help"
+const helpText = [
+    {
+        header: 'TinyPNG CLI',
+        content: "{italic Using tinyPNG's API with node}"
+    },
+    {
+        header: 'Usage',
+        content: '$ node tinify.js [command] <argument>'
+    },
+    {
+        header: 'Commands',
+        optionList: [
+            {
+                name: 'help',
+                alias: 'h',
+                description: 'Displays this help text.\n',
+                type: Boolean
+            },
+            {
+                name: 'key',
+                alias: 'k',
+                description: 'Sets the API key.\n',
+                type: String,
+                typeLabel: '{underline.italic Key}'
+            },
+            {
+                name: 'mode',
+                alias: 'm',
+                description: 'Changes the conversion/reduction mode.\n Possible Values: direct, png, webp, smallest.\nFor further detail: $ node tinify.js -m -h\n',
+                type: String,
+                typeLabel: '{underline.italic Option}',
+            },
+            {
+                name: 'output',
+                alias: 'o',
+                description: 'Changes the output mode.\n Possible Values: backup, output, direct.\ndirect is not recommended.\nFor further detail: $ node tinify.js -o -h\n',
+                type: String,
+                typeLabel: '{underline.italic Option}',
+            },
+            {
+                name: 'folder',
+                alias: 'f',
+                description: 'Processes all files in the folder of the given path.\n',
+                type: String,
+                typeLabel: '{underline.italic Path to folder}',
+            },
+            {
+                name: 'single',
+                alias: 's',
+                description: 'Processes the file of the given path.\n',
+                type: String,
+                typeLabel: '{underline.italic Path to file}',
+            },
+            {
+                name: 'list',
+                alias: 'l',
+                description: 'Lists how options are currently set.\n',
+                type: Boolean,
+            },
+            {
+                name: 'reset',
+                description: 'Resets all options to their starting values.',
+                type: Boolean,
             }
-        break;
-        case "-f" || "-folder":
-            if (key != "unset") {
-                process.argv[3] ? Run(process.argv[3]) : console.log("No folder given");
-            } else { console.log("API key has not been set.\n-h or -help for help");}
+        ],
+    }
+]
+const modeHelpText = [
+    {
+        header: 'Changing mode',
+        content: "{italic Altering how tinyPNG's API does its thing}"
+    },
+    {
+        header: 'Usage',
+        content: '$ node tinify.js -m <argument>\nor\n$ node tinify.js --mode <argument>'
+    },
+    {
+        header: 'Arguments',
+        content: [
+            { colA: '{bold -h, --help}', colB: 'Displays this help Text.\n'},
+            { colA: '{bold webp}', colB: 'All output files are in the WebP image format.\nDoes both conversion and file size optimization.\n'},
+            { colA: '{bold png}', colB: 'All output files are in the PNG image format.\nDoes both conversion and file size optimization.\n'},
+            { colA: '{bold smallest}', colB: "Output files are either in the WebP or PNG image format.\nTinyPNG's API returns only the smallest of the two.\nDoes both conversion and file-size optimization.\n"},
+            { colA: '{bold direct}', colB: 'Simply optimizes the image, maintaining the file type.'},
+        ]
+    }
+]
+const outputHelpText = [
+    {
+        header: 'Changing output',
+        content: "{italic Altering where the output files go}"
+    },
+    {
+        header: 'Usage',
+        content: '$ node tinify.js -o <argument>\nor\n$ node tinify.js --output <argument>'
+    },
+    {
+        header: 'Arguments',
+        content: [
+            { colA: '{bold -h, --help}', colB: 'Displays this help Text.\n'},
+            { colA: '{bold output}', colB: `All output files are sent to a folder named "${outputFolderName}".\n`},
+            { colA: '{bold backup}', colB: `All original files are sent to a folder named "${backupFolderName}".\nThe output files are placed in the original directory.\n`},
+            { colA: '{bold direct}', colB: "!! {italic NOT RECOMMENDED} !!\nOutput files are placed in the original directory.\nIf the output has the same name and type as the original, the latter is overwritten."},
+        ]
+    }
+]
+
+const checkHelpTrigger = (checkedIndex, helpText) => {
+    const helpTrigger = [undefined, "-h", "--help"]
+    if (helpTrigger.includes(process.argv[checkedIndex])) {
+        console.log(commandLineUsage(helpText))
+        return true 
+    }
+    return false
+}
+
+const optionList = [
+    {
+        content: [
+            { colA: '{bold Mode:}', colB: `${mode.name}`},
+            { colA: '{bold Output Mode:}', colB: `${outputMode}`},
+            { colA: '{bold Key:}', colB: `${key != "unset" ? "set" : "unset"}`},
+        ]
+    }
+]
+
+/////////////////////////////////////////////////////////////////////////
+// this processes all the commands and arguments V
+/////////////////////////////////////////////////////////////////////////
+if (process.argv[4]) {
+    console.log(`  Too many arguments`)
+} else {
+    if (checkHelpTrigger(2, helpText)) { 
+        return
+    }
+    switch (process.argv[2]) {
+        /////////////////////////////////////////////////////////////////////////
+        case "-k":
+        case "--key":
+            if (process.argv[3]) {
+                Rewrite("const key", `${process.argv[3]}`,`  Key has been updated.`)
+            } else {
+                console.log(`  No key given.${helpBark}`)
+            }
         break
-        case "-reset":
+        /////////////////////////////////////////////////////////////////////////
+        case "-m":
+        case "--mode":
+            modeChange()
+        break
+        /////////////////////////////////////////////////////////////////////////
+        case "-o":
+        case "--output":
+            OutputmodeChange()
+        break
+        /////////////////////////////////////////////////////////////////////////
+        case "-s":
+        case "--single":
+            StartProcess()
+        break
+        /////////////////////////////////////////////////////////////////////////
+        case "-f":
+        case "--folder":
+            StartProcess()
+        break
+        /////////////////////////////////////////////////////////////////////////
+        case "-l":
+        case "--list":
+            console.log(commandLineUsage(optionList))
+        break
+        /////////////////////////////////////////////////////////////////////////
+        case "--reset":
             Rewrite("const mode", "{name: 'webp', value:['image/webp']}", undefined, true, () => {
                 Rewrite("const key", `unset`, undefined, false, () => {
                     Rewrite("const outputMode", "output")
                 })
             })
-            console.log("Options have been reset");
+            console.log(`  Options have been reset`)
         break
-        case undefined:
-            console.log("No command given.\n-h or -help for help");
-        break
+        /////////////////////////////////////////////////////////////////////////
         default:
-            console.log("Invalid command");
-        break;
+            console.log(`  Invalid command.${helpBark}`)
+        break
+        /////////////////////////////////////////////////////////////////////////
     }
 }
 
 
+/////////////////////////////////////////////////////////////////////////
+// Functions used for configuring stuff V
+/////////////////////////////////////////////////////////////////////////
 function modeChange() {
-    let returnMessage = "Mode changed"
+    let returnMessage = `  Mode changed`
+
+    if (checkHelpTrigger(3, modeHelpText)) {
+        return   
+    }
+
     switch (process.argv[3]) {
-        case undefined:
-            console.log("mode list");
-            break
+        /////////////////////////////////////////////////////////////////////////
         case "direct":
             Rewrite("const mode",  "{name: 'direct', value:'none'}", returnMessage, true)
             break
+        /////////////////////////////////////////////////////////////////////////
         case "png": 
             Rewrite("const mode", "{name: 'png', value:['image/png']}", returnMessage, true)
             break
+        /////////////////////////////////////////////////////////////////////////
         case "webp": 
             Rewrite("const mode", "{name: 'webp', value:['image/webp']}", returnMessage, true)
             break
+        /////////////////////////////////////////////////////////////////////////
         case "smallest": 
             Rewrite("const mode", "{name: 'none', value:['image/webp','image/png']}", returnMessage, true)
             break
+        /////////////////////////////////////////////////////////////////////////
         default:
-            console.log("invalid mode");
-            break;
+            console.log(`Invalid mode.\nAvailable modes: direct, png, web, smallest${helpBark}`)
+            break
+        /////////////////////////////////////////////////////////////////////////
+    }
+}
+
+function OutputmodeChange() {
+    let validOptions = ["output", "backup", "direct"]
+
+    if (checkHelpTrigger(3, outputHelpText)) {
+        return
+    }
+
+    if (validOptions.includes(process.argv[3])) {
+        Rewrite("const outputMode", `${process.argv[3]}`, `  Output Mode has been updated.`)
+    } else {
+        console.log(`  Invalid output mode.\n  Available modes: output, backup, direct (not recommended)${helpBark}`)
+    }
+}
+
+function StartProcess() {
+////////
+/// This starts the Process
+///////
+    if (checkHelpTrigger(3, helpText)) {
+        return
+    }
+
+    if (key != "unset") {
+        process.argv[3] ? directoryHandling(process.argv[3]) : console.log(`No path given.${helpBark}`)
+    } else { 
+        console.log(`  API key has not been set.${helpBark}`)
     }
 }
 
 function Rewrite(alteredValue, newValue, logText, notString, callback) {
     fs.readFile(__filename, 'utf8', (err, data) => {
     if (err) {
-        console.error('Error reading file:', err);
-        return;
+        console.error(`  Error reading file:`, err)
+        return
     }
     
-    const regex = new RegExp(`${alteredValue} = .*`);
+    const regex = new RegExp(`${alteredValue} = .*`)
     let modifiedData
     if (notString) {
-        modifiedData = data.replace(regex, `${alteredValue} = ${newValue};`);
+        modifiedData = data.replace(regex, `${alteredValue} = ${newValue}`)
     } else {
-        modifiedData = data.replace(regex, `${alteredValue} = "${newValue}";`);
+        modifiedData = data.replace(regex, `${alteredValue} = "${newValue}"`)
     }
     
-    fs.writeFile(__filename, modifiedData, 'utf8', err => {
-        if (err) {
-        console.error('Error writing file:', err);
-        return;
+    fs.writeFile(__filename, modifiedData, 'utf8', e => {
+        if (e) {
+        console.error(`  Error writing file:`, e)
+        return
         }
         if (logText) {
-            console.log(logText);
+            console.log(logText)
         }
+        // exists to chain multiple rewrites correctly
+        // if they happen asyncronously, things break
         if (callback) {
-            callback();
+            callback()
         }
-    });
-    });
-}
-
-function Run(TargetFolder) {
-    if (process.argv[2] == "-s" || process.argv[2] == "-single") {
-        var file = path.basename(TargetFolder)
-        TargetFolder = path.dirname(TargetFolder)
-    }
-    fs.readdir(TargetFolder, (error, succes) => {
-        if (error) {
-            return console.log(error)
-        }
-        switch (outputMode) {
-            /////////////////////////////////////////////////////////////////////////
-            case "output":
-                fs.mkdir(`${TargetFolder}/${outputFolderName}`, (err) => {
-                    if (err) {
-                        if (err.code === 'EEXIST') {
-                            console.error(`Directory (${outputFolderName}) already exists`);
-                            process.argv[2] == "-f" ? folderFileWork(TargetFolder, succes) : fileHandler(TargetFolder, file) 
-                        } else {
-                            console.error('Error:', err);
-                        }
-                        return;
-                    }
-                    console.log(`Output directory (${outputFolderName}) created`);
-                    process.argv[2] == "-f" ? folderFileWork(TargetFolder, succes) : fileHandler(TargetFolder, file) 
-                });
-            break;
-            /////////////////////////////////////////////////////////////////////////
-            case "backup":
-                fs.mkdir(`${TargetFolder}/${backupFolderName}`, (err) => {
-                    if (err) {
-                        if (err.code === 'EEXIST') {
-                            console.error(`Directory (${backupFolderName}) already exists`);
-                            process.argv[2] == "-f" ? folderFileWork(TargetFolder, succes) : fileHandler(TargetFolder, file) 
-                        } else {
-                            console.error('Error:', err);
-                        }
-                        return;
-                    }
-                    console.log(`Output directory (${backupFolderName}) created`);
-                    process.argv[2] == "-f" ? folderFileWork(TargetFolder, succes) : fileHandler(TargetFolder, file) 
-                });
-            break;
-            case "direct":
-                process.argv[2] == "-f" ? folderFileWork(TargetFolder, succes) : fileHandler(TargetFolder, file)
-            break
-            default:
-                console.log("Invalid output mode");
-            break;
-        }
-
-
-
+    })
     })
 }
 
-async function folderFileWork(TargetFolder, data) {
-    const files =  await data.filter(file => file.endsWith('png') || file.endsWith('jpeg') || file.endsWith('jpg') || file.endsWith('webp'))
 
-    if (outputMode == "backup") {
+
+/////////////////////////////////////////////////////////////////////////
+// Actually running the beast V
+/////////////////////////////////////////////////////////////////////////
+// Handles directory creation, if needed.
+function directoryHandling(target) {
+    // Need to fix the target if single.
+    if (process.argv[2] == "-s" || process.argv[2] == "--single") {
         try {
-            // Moving all files asynchronously
-            await Promise.all(files.map(async (fileName) => {
-                const sourcePath = `${TargetFolder}/${fileName}`;
-                const destinationPath = `${TargetFolder}/${backupFolderName}/${fileName}`;
-                await rename(sourcePath, destinationPath);
-            }));
-            
-            console.log(`All moved to backup folder (${backupFolderName})`);
-            TargetFolder = `${TargetFolder}/${backupFolderName}`
-
-            files.forEach(async (element) => {
-                fileHandler(TargetFolder, element)
-            })
-        } catch (error) {
-            console.error('Error moving files:', error);
+            if (!fs.statSync(target).isFile()) {
+                throw new Error(`${target} is not a file.`);
+            }
+        } catch (e) {
+            console.log(`  ${e}`)
+            return
         }
-    } else {
-        files.forEach(async (element) => {
-            fileHandler(TargetFolder, element)
-        })
+        var file = path.basename(target)
+        target = path.dirname(target)
     }
+
+    fs.readdir(target, (e, success) => {
+        if (e) {
+            return console.log(`  Error: ${e.message}`)
+        }
+
+        function execute() {
+            process.argv[2] == "-f" || process.argv[2] == "--folder" ? folderWork(target, success) : fileHandler(target, file)
+        }
+
+        function createDirectory(directory) {
+            fs.mkdir(`${target}/${directory}`, (e) => {
+                if (e) {
+                    if (e.code === 'EEXIST') {
+                        console.error(`  Directory (${directory}) already exists\n`)
+                        execute()
+                    } else {
+                        console.error(`  Directory Creation Error:`, e.message)
+                    }
+                    return
+                }
+                console.log(`  Output directory (${directory}) created\n`)
+                execute() 
+            })
+        }
+
+        switch (outputMode) {
+            /////////////////////////////////////////////////////////////////////////
+            case "output":
+                createDirectory(outputFolderName)
+            break
+            /////////////////////////////////////////////////////////////////////////
+            case "backup":
+                createDirectory(backupFolderName)
+            break
+            /////////////////////////////////////////////////////////////////////////
+            case "direct":
+                execute() 
+            break
+            /////////////////////////////////////////////////////////////////////////
+            default:
+                // exists for safety
+                console.log("Invalid output mode")
+            break
+        }
+    })
 }
 
-async function fileHandler(TargetFolder, element) {
+// Horribly named.
+// Recieves all files and handles passing them to the fileHandler 
+async function folderWork(target, data) {
+    const files =  await data.filter(file => file.endsWith('png') || file.endsWith('jpeg') || file.endsWith('jpg') || file.endsWith('webp'))
+
+    files.forEach(async (element) => {
+            fileHandler(target, element)
+    })
+}
+
+// Actually uses tinyPNGs systems and generates the output images 
+async function fileHandler(target, element) {
+
+    // this is used in the output's filepath
     let outputPath
     switch (outputMode) {
         /////////////////////////////////////////////////////////////////////////
         case "output":
             outputPath = `/${outputFolderName}`
-        break;
+        break
         /////////////////////////////////////////////////////////////////////////
         case "backup":
             outputPath = `/..`
-        break;
+        break
+        /////////////////////////////////////////////////////////////////////////
         case "direct":
             outputPath = ""
         break
+        /////////////////////////////////////////////////////////////////////////
         default:
-            console.log("Invalid output mode");
-        break;
+            // exists for safety
+            console.log("Invalid output mode")
+        break
     }
 
-    if ((process.argv[2] == "-s" || process.argv[2] == "-single") && outputMode == "backup") {
-        await rename(`${TargetFolder}/${element}`, `${TargetFolder}/${outputFolderName}/${element}`);
-        TargetFolder = `${TargetFolder}/${outputFolderName}`
+    // since -s and --single skip the previous function, the files have to be moved here if the mode is backup
+    if (outputMode == "backup") {
+        await rename(`${target}/${element}`, `${target}/${backupFolderName}/${element}`)
+        target = `${target}/${backupFolderName}`
     }
 
+    var imageFilePath = `${target}/${element}`
 
-    var imageFilePath = `${TargetFolder}/${element}`
     try {
-        console.log(`Processing ${imageFilePath}`);
-        const originalImageFilePrefix = element.substring(
-          0,
-          element.lastIndexOf('.')
-        );
-    
-        const source = tinify.fromFile(imageFilePath);
+        console.log(`  Processing ${imageFilePath}`)
+        const originalImageFilePrefix = element.substring(0,element.lastIndexOf('.'))
+        
+        const source = tinify.fromFile(imageFilePath)
+        
         if (mode.name != "direct") {
-            const converted = source.convert({ type: mode.value });
-            const convertedExtension = await converted.result().extension();
-            await converted.toFile(`${TargetFolder}${outputPath}/${originalImageFilePrefix}.${convertedExtension}`);
+            const converted = source.convert({ type: mode.value })
+            const convertedExtension = await converted.result().extension()
+            await converted.toFile(`${target}${outputPath}/${originalImageFilePrefix}.${convertedExtension}`)
         } else {
-            await source.toFile(`${TargetFolder}${outputPath}/${element}`);
+            await source.toFile(`${target}${outputPath}/${element}`)
         }
-        console.log(`${element} processed. Compression Count: ${tinify.compressionCount} `);
-      } catch (e) {
-        console.log(`\nFailed to process ${imageFilePath}`);
-      }
-    
+
+        console.log(`  ${element} processed. Compression Count: ${tinify.compressionCount} `)
+    } catch (e) {
+        console.log(`\n  Failed to process ${imageFilePath}: ${e}`)
     }
+}

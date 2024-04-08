@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "command-line-usage": "^7.0.1",
     "tinify": "^1.7.1"
   }
 }
