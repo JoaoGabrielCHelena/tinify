@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 const fs = require('fs')
 const tinify = require("tinify")
 const path = require('path')
@@ -240,7 +242,7 @@ function modeChange() {
             break
         /////////////////////////////////////////////////////////////////////////
         default:
-            console.log(`Invalid mode.\nAvailable modes: direct, png, web, smallest${helpBark}`)
+            console.log(`  Invalid mode.\n  Available modes: direct, png, web, smallest${helpBark}`)
             break
         /////////////////////////////////////////////////////////////////////////
     }
@@ -410,7 +412,7 @@ async function fileHandler(target, element) {
         break
     }
 
-    // since -s and --single skip the previous function, the files have to be moved here if the mode is backup
+    // moving files to the buckup folder (if thats the mode)
     if (outputMode == "backup") {
         await rename(`${target}/${element}`, `${target}/${backupFolderName}/${element}`)
         target = `${target}/${backupFolderName}`
