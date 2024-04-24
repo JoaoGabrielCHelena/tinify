@@ -19,7 +19,7 @@ const mode = {name: 'webp', value:['image/webp']}
 const outputMode = "output"
 ///////////////////////
 
-tinify.key = key
+tinify.key = ( process.env.TINIFY_KEY && key == "unset" ) ? process.env.TINIFY_KEY : key 
 
 /////////////////////////////////////////////////////////////////////////
 // Texts V
@@ -146,7 +146,7 @@ const optionList = [
         content: [
             { colA: '{bold Mode:}', colB: `${mode.name}`},
             { colA: '{bold Output Mode:}', colB: `${outputMode}`},
-            { colA: '{bold Key:}', colB: `${key != "unset" ? "set" : "unset"}`},
+            { colA: '{bold Key:}', colB: `${key == "unset" ? !process.env.TINIFY_KEY ?  "unset" : "set" : "set"}`},
         ]
     }
 ]
@@ -270,7 +270,7 @@ function StartProcess() {
         return
     }
 
-    if (key != "unset") {
+    if (key != "unset" || process.env.TINIFY_KEY) {
         process.argv[3] ? directoryHandling(process.argv[3]) : console.log(`No path given.${helpBark}`)
     } else { 
         console.log(`  API key has not been set.${helpBark}`)
@@ -425,16 +425,16 @@ async function fileHandler(target, element) {
         const originalImageFilePrefix = element.substring(0,element.lastIndexOf('.'))
         
         const source = tinify.fromFile(imageFilePath)
-        
+        let convertedExtension = ""
         if (mode.name != "direct") {
             const converted = source.convert({ type: mode.value })
-            const convertedExtension = await converted.result().extension()
+            convertedExtension = await converted.result().extension()
             await converted.toFile(`${target}${outputPath}/${originalImageFilePrefix}.${convertedExtension}`)
         } else {
             await source.toFile(`${target}${outputPath}/${element}`)
         }
 
-        console.log(`  ${element} processed. Compression Count: ${tinify.compressionCount} `)
+        console.log(`  ${element} processed. Compression Count: ${tinify.compressionCount}. ${mode.name != "direct" ? "(Output: " + originalImageFilePrefix + "." + convertedExtension + ")" : ""}`)
     } catch (e) {
         console.log(`\n  Failed to process ${imageFilePath}: ${e}`)
     }
