@@ -154,7 +154,7 @@ const optionList = [
 /////////////////////////////////////////////////////////////////////////
 // this processes all the commands and arguments V
 /////////////////////////////////////////////////////////////////////////
-if (process.argv[4]) {
+if (!((process.argv[2] == "-s") || (process.argv[2] == "--single")) && process.argv[4]) {
     console.log(`  Too many arguments`)
 } else {
     if (checkHelpTrigger(2, helpText)) { 
@@ -316,17 +316,20 @@ function Rewrite(alteredValue, newValue, logText, notString, callback) {
 /////////////////////////////////////////////////////////////////////////
 // Handles directory creation, if needed.
 function directoryHandling(target) {
+    // Need if multiple files are passed to single.
+    let files = process.argv.splice(3)
     // Need to fix the target if single.
     if (process.argv[2] == "-s" || process.argv[2] == "--single") {
-        try {
-            if (!fs.statSync(target).isFile()) {
-                throw new Error(`${target} is not a file.`);
+        files.forEach((element) => {
+            try {
+                if (!fs.statSync(element).isFile()) {
+                    throw new Error(`${element} is not a file.`);
+                }
+            } catch (e) {
+                console.log(`  ${e}`)
+                return
             }
-        } catch (e) {
-            console.log(`  ${e}`)
-            return
-        }
-        var file = path.basename(target)
+        })
         target = path.dirname(target)
     }
 
@@ -336,7 +339,7 @@ function directoryHandling(target) {
         }
 
         function execute() {
-            process.argv[2] == "-f" || process.argv[2] == "--folder" ? folderWork(target, success) : fileHandler(target, file)
+            process.argv[2] == "-f" || process.argv[2] == "--folder" ? folderWork(target, success) : folderWork(target, files) 
         }
 
         function createDirectory(directory) {
