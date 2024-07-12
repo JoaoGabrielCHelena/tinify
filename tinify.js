@@ -15,7 +15,7 @@ const backupFolderName = "tinifyOriginalBackup"
 // Values of the settings V
 /////////////////////////////////////////////////////////////////////////
 const key = "unset"
-const mode = {name: 'webp', value:['image/webp']}
+const mode = {name: 'none', value:['image/webp','image/png']}
 const outputMode = "output"
 ///////////////////////
 
@@ -350,6 +350,8 @@ function directoryHandling(target) {
                 if (!fs.statSync(element).isFile()) {
                     throw new Error(`${element} is not a file.`);
                 }
+                let fileObj = path.parse(element)
+                files[files.indexOf(element)] = fileObj.base 
             } catch (e) {
                 console.log(`  ${e}`)
                 return
@@ -411,7 +413,7 @@ async function folderWork(target, data) {
     const files =  await data.filter(file => file.endsWith('png') || file.endsWith('jpeg') || file.endsWith('jpg') || file.endsWith('webp'))
 
     files.forEach(async (element) => {
-            fileHandler(target, element)
+        fileHandler(target, element)
     })
 }
 
@@ -447,6 +449,7 @@ async function fileHandler(target, element) {
     }
 
     var imageFilePath = `${target}/${element}`
+    var startingSize = await getFileSize(imageFilePath)
 
     try {
         console.log(`  Processing ${imageFilePath}`)
@@ -454,16 +457,43 @@ async function fileHandler(target, element) {
         
         const source = tinify.fromFile(imageFilePath)
         let convertedExtension = ""
+
         if (mode.name != "direct") {
             const converted = source.convert({ type: mode.value })
             convertedExtension = await converted.result().extension()
-            await converted.toFile(`${target}${outputPath}/${originalImageFilePrefix}.${convertedExtension}`)
+            let newPath = `${target}${outputPath}/${originalImageFilePrefix}.${convertedExtension}`
+            await converted.toFile(newPath)
+            var newSize = await getFileSize(newPath)
         } else {
-            await source.toFile(`${target}${outputPath}/${element}`)
+            let newPath = `${target}${outputPath}/${element}`
+            await source.toFile(newPath)
+            var newSize = await getFileSize(newPath)
         }
 
-        console.log(`  ${element} processed. Compression Count: ${tinify.compressionCount}. ${mode.name != "direct" ? "(Output: " + originalImageFilePrefix + "." + convertedExtension + ")" : ""}`)
+        // this is way too long but this is already a write-only thing overall really
+        console.log(`  ${element} processed. Compression Count: ${tinify.compressionCount}. ${mode.name != "direct" ? "(Output: " + originalImageFilePrefix + "." + convertedExtension + ")" : ""}\n  From ${startingSize[0]} to ${newSize[0]}. ${startingSize[1] - newSize[1] < 0 ? '!! Increased by ' + formatBytes(Math.abs(startingSize[1] - newSize[1])) : 'Reduced by ' + formatBytes(startingSize[1] - newSize[1]) }.\n`)
     } catch (e) {
         console.log(`\n  Failed to process ${imageFilePath}: ${e}`)
+    }
+}
+
+
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const sizes = ['Bytes', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    if (i >= sizes.length) return (bytes / Math.pow(1024, 2)).toFixed(2) + ' MB';
+    return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + sizes[i];
+}
+
+// index 0 is the formatted size, index 1 is the size in bytes
+async function getFileSize(filePath) {
+    try {
+        const stats = await fs.promises.stat(filePath);
+        const humanReadableSize = formatBytes(stats.size);
+        return [humanReadableSize, stats.size];
+    } catch (err) {
+        console.error(`Filesize reader broke`);
+        throw err;
     }
 }
