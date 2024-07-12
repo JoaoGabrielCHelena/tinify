@@ -19,7 +19,17 @@ const mode = {name: 'webp', value:['image/webp']}
 const outputMode = "output"
 ///////////////////////
 
-tinify.key = ( process.env.TINIFY_KEY && key == "unset" ) ? process.env.TINIFY_KEY : key 
+tinify.key = ( process.env.TINIFY_KEY && key == "unset" ) ? process.env.TINIFY_KEY :  key 
+
+new Promise((resolve, reject) => {
+    tinify.validate((err) => {
+        if (err) return reject(err);
+        resolve();
+    })
+}).then(handleArguments)
+  .catch((e) => {
+    console.error(`  API key has not been set or is invalid.${helpBark}`)
+  })
 
 /////////////////////////////////////////////////////////////////////////
 // Texts V
@@ -76,12 +86,18 @@ const helpText = [
                 alias: 's',
                 description: 'Processes the file of the given path.\n',
                 type: String,
-                typeLabel: '{underline.italic Path to file}',
+                typeLabel: '{underline.italic Path to file(s)}',
             },
             {
                 name: 'list',
                 alias: 'l',
                 description: 'Lists how options are currently set.\n',
+                type: Boolean,
+            },
+            {
+                name: 'conversions, --count',
+                alias: 'c',
+                description: 'Shows the amount of monthly conversions made.\n',
                 type: Boolean,
             },
             {
@@ -154,61 +170,69 @@ const optionList = [
 /////////////////////////////////////////////////////////////////////////
 // this processes all the commands and arguments V
 /////////////////////////////////////////////////////////////////////////
-if (!((process.argv[2] == "-s") || (process.argv[2] == "--single")) && process.argv[4]) {
-    console.log(`  Too many arguments`)
-} else {
-    if (checkHelpTrigger(2, helpText)) { 
-        return
-    }
-    switch (process.argv[2]) {
-        /////////////////////////////////////////////////////////////////////////
-        case "-k":
-        case "--key":
-            if (process.argv[3]) {
-                Rewrite("const key", `${process.argv[3]}`,`  Key has been updated.`)
-            } else {
-                console.log(`  No key given.${helpBark}`)
-            }
-        break
-        /////////////////////////////////////////////////////////////////////////
-        case "-m":
-        case "--mode":
-            modeChange()
-        break
-        /////////////////////////////////////////////////////////////////////////
-        case "-o":
-        case "--output":
-            OutputmodeChange()
-        break
-        /////////////////////////////////////////////////////////////////////////
-        case "-s":
-        case "--single":
-            StartProcess()
-        break
-        /////////////////////////////////////////////////////////////////////////
-        case "-f":
-        case "--folder":
-            StartProcess()
-        break
-        /////////////////////////////////////////////////////////////////////////
-        case "-l":
-        case "--list":
-            console.log(commandLineUsage(optionList))
-        break
-        /////////////////////////////////////////////////////////////////////////
-        case "--reset":
-            Rewrite("const mode", "{name: 'webp', value:['image/webp']}", undefined, true, () => {
-                Rewrite("const key", `unset`, undefined, false, () => {
-                    Rewrite("const outputMode", "output")
+function handleArguments() {
+    if (!((process.argv[2] == "-s") || (process.argv[2] == "--single")) && process.argv[4]) {
+        console.log(`  Too many arguments`)
+    } else {
+        if (checkHelpTrigger(2, helpText)) { 
+            return
+        }
+        switch (process.argv[2]) {
+            /////////////////////////////////////////////////////////////////////////
+            case "-k":
+            case "--key":
+                if (process.argv[3]) {
+                    Rewrite("const key", `${process.argv[3]}`,`  Key has been updated.`)
+                } else {
+                    console.log(`  No key given.${helpBark}`)
+                }
+            break
+            /////////////////////////////////////////////////////////////////////////
+            case "-m":
+            case "--mode":
+                modeChange()
+            break
+            /////////////////////////////////////////////////////////////////////////
+            case "-o":
+            case "--output":
+                OutputmodeChange()
+            break
+            /////////////////////////////////////////////////////////////////////////
+            case "-s":
+            case "--single":
+                StartProcess()
+            break
+            /////////////////////////////////////////////////////////////////////////
+            case "-f":
+            case "--folder":
+                StartProcess()
+            break
+            /////////////////////////////////////////////////////////////////////////
+            case "-c":
+            case "--conversions":
+            case "--count":
+                console.log(`  ${tinify.compressionCount} compressions out of 500 free monthly compressions.\n  ${500 - tinify.compressionCount} free monthly compressions left.`)
+            break
+            /////////////////////////////////////////////////////////////////////////
+            case "-l":
+            case "--list":
+                console.log(commandLineUsage(optionList))
+            break
+            /////////////////////////////////////////////////////////////////////////
+            case "--reset":
+                Rewrite("const mode", "{name: 'webp', value:['image/webp']}", undefined, true, () => {
+                    Rewrite("const key", `unset`, undefined, false, () => {
+                        Rewrite("const outputMode", "output")
+                    })
                 })
-            })
-            console.log(`  Options have been reset`)
-        break
-        /////////////////////////////////////////////////////////////////////////
-        default:
-            console.log(`  Invalid command.${helpBark}`)
-        break
-        /////////////////////////////////////////////////////////////////////////
+                console.log(`  Options have been reset`)
+            break
+            /////////////////////////////////////////////////////////////////////////
+            default:
+                console.log(`  Invalid command.${helpBark}`)
+            break
+            /////////////////////////////////////////////////////////////////////////
+        }
     }
 }
 
@@ -273,6 +297,7 @@ function StartProcess() {
     if (key != "unset" || process.env.TINIFY_KEY) {
         process.argv[3] ? directoryHandling(process.argv[3]) : console.log(`No path given.${helpBark}`)
     } else { 
+        // this should never trigger
         console.log(`  API key has not been set.${helpBark}`)
     }
 }
