@@ -15,11 +15,20 @@ const backupFolderName = "tinifyOriginalBackup"
 // Values of the settings V
 /////////////////////////////////////////////////////////////////////////
 const key = "unset"
-const mode = {name: 'none', value:['image/webp','image/png']}
+const mode = {name: 'webp', value:['image/webp']}
 const outputMode = "output"
 ///////////////////////
 
 tinify.key = ( process.env.TINIFY_KEY && key == "unset" ) ? process.env.TINIFY_KEY :  key 
+
+if (process.argv[2] == "-k" || process.argv[2] == "--key") {
+    if (process.argv[3]) {
+        Rewrite("const key", `${process.argv[3]}`,`  Key has been updated.`)
+        tinify.key = process.argv[3]
+    } else {
+        console.log(`  No key given.`)
+    }
+}
 
 new Promise((resolve, reject) => {
     tinify.validate((err) => {
@@ -28,7 +37,7 @@ new Promise((resolve, reject) => {
     })
 }).then(handleArguments)
   .catch((e) => {
-    console.error(`  API key has not been set or is invalid.${helpBark}`)
+    console.error(`  API key has not been set or is invalid.\n  Set it with tinify -k {key} or\n  have and enviroment variable named TINIFY_KEY with it's value`)
   })
 
 /////////////////////////////////////////////////////////////////////////
@@ -171,6 +180,9 @@ const optionList = [
 // this processes all the commands and arguments V
 /////////////////////////////////////////////////////////////////////////
 function handleArguments() {
+    if (process.argv[2] == "-k" || process.argv[2] == "--key") {
+      process.exit()
+    }
     if (!((process.argv[2] == "-s") || (process.argv[2] == "--single")) && process.argv[4]) {
         console.log(`  Too many arguments`)
     } else {
@@ -178,15 +190,6 @@ function handleArguments() {
             return
         }
         switch (process.argv[2]) {
-            /////////////////////////////////////////////////////////////////////////
-            case "-k":
-            case "--key":
-                if (process.argv[3]) {
-                    Rewrite("const key", `${process.argv[3]}`,`  Key has been updated.`)
-                } else {
-                    console.log(`  No key given.${helpBark}`)
-                }
-            break
             /////////////////////////////////////////////////////////////////////////
             case "-m":
             case "--mode":
