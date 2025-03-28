@@ -6,6 +6,7 @@ const path = require('path')
 const util = require('util')
 const rename = util.promisify(fs.rename)
 const commandLineUsage = require('command-line-usage')
+require('dotenv').config({path: __dirname + "/.env"})
 
 const outputFolderName = "tinifyOutput"
 const backupFolderName = "tinifyOriginalBackup"
@@ -14,16 +15,16 @@ const backupFolderName = "tinifyOriginalBackup"
 /////////////////////////////////////////////////////////////////////////
 // Values of the settings V
 /////////////////////////////////////////////////////////////////////////
-const key = "unset"
-const mode = {name: 'webp', value:['image/webp']}
-const outputMode = "output"
+const key = process.env.KEY
+const mode = JSON.parse(process.env.OUTPUT_TYPE)
+const outputMode = process.env.OUTPUT_PATHING
 ///////////////////////
 
 tinify.key = ( process.env.TINIFY_KEY && key == "unset" ) ? process.env.TINIFY_KEY :  key 
 
 if (process.argv[2] == "-k" || process.argv[2] == "--key") {
     if (process.argv[3]) {
-        Rewrite("const key", `${process.argv[3]}`,`  Key has been updated.`)
+        Rewrite("KEY", `${process.argv[3]}`,`  Key has been updated.`)
         tinify.key = process.argv[3]
     } else {
         console.log(`  No key given.`)
@@ -223,12 +224,7 @@ function handleArguments() {
             break
             /////////////////////////////////////////////////////////////////////////
             case "--reset":
-                Rewrite("const mode", "{name: 'webp', value:['image/webp']}", undefined, true, () => {
-                    Rewrite("const key", `unset`, undefined, false, () => {
-                        Rewrite("const outputMode", "output")
-                    })
-                })
-                console.log(`  Options have been reset`)
+                Rewrite(["KEY", "OUTPUT_TYPE", "OUTPUT_PATHING"], ["unset", '{"name": "webp", "value":["image/webp"]}', "output"], `  Options have been reset`)
             break
             /////////////////////////////////////////////////////////////////////////
             default:
@@ -253,19 +249,19 @@ function modeChange() {
     switch (process.argv[3]) {
         /////////////////////////////////////////////////////////////////////////
         case "direct":
-            Rewrite("const mode",  "{name: 'direct', value:'none'}", returnMessage, true)
+            Rewrite("OUTPUT_TYPE",  '{"name": "direct", "value":"none"}', returnMessage)
             break
         /////////////////////////////////////////////////////////////////////////
         case "png": 
-            Rewrite("const mode", "{name: 'png', value:['image/png']}", returnMessage, true)
+            Rewrite("OUTPUT_TYPE", '{"name": "png", "value":["image/png"]}', returnMessage)
             break
         /////////////////////////////////////////////////////////////////////////
         case "webp": 
-            Rewrite("const mode", "{name: 'webp', value:['image/webp']}", returnMessage, true)
+            Rewrite("OUTPUT_TYPE", '{"name": "webp", "value":["image/webp"]}', returnMessage)
             break
         /////////////////////////////////////////////////////////////////////////
         case "smallest": 
-            Rewrite("const mode", "{name: 'none', value:['image/webp','image/png']}", returnMessage, true)
+            Rewrite("OUTPUT_TYPE", '{"name": "smallest", "value":["image/webp","image/png"]}', returnMessage)
             break
         /////////////////////////////////////////////////////////////////////////
         default:
@@ -283,7 +279,7 @@ function OutputmodeChange() {
     }
 
     if (validOptions.includes(process.argv[3])) {
-        Rewrite("const outputMode", `${process.argv[3]}`, `  Output Mode has been updated.`)
+        Rewrite("OUTPUT_PATHING", `${process.argv[3]}`, `  Output Mode has been updated.`)
     } else {
         console.log(`  Invalid output mode.\n  Available modes: output, backup, direct (not recommended)${helpBark}`)
     }
@@ -305,22 +301,28 @@ function StartProcess() {
     }
 }
 
-function Rewrite(alteredValue, newValue, logText, notString, callback) {
-    fs.readFile(__filename, 'utf8', (err, data) => {
-    if (err) {
-        console.error(`  Error reading file:`, err)
-        return
-    }
-    
-    const regex = new RegExp(`${alteredValue} = .*`)
-    let modifiedData
-    if (notString) {
-        modifiedData = data.replace(regex, `${alteredValue} = ${newValue}`)
+function Rewrite(alteredValue, newValue, logText ) {
+    let newEnv = "",
+        env = {
+            KEY: process.env.KEY,
+            OUTPUT_TYPE: process.env.OUTPUT_TYPE,
+            OUTPUT_PATHING: process.env.OUTPUT_PATHING,
+        }
+
+    if ( Array.isArray(alteredValue) ) {
+        for (let i = 0; i < alteredValue.length; i++) {
+            // masterful nesting of things which should never be nested
+            env[alteredValue[i]] = newValue[i]
+        }
     } else {
-        modifiedData = data.replace(regex, `${alteredValue} = "${newValue}"`)
+        env[alteredValue] = newValue
+    }
+
+    for (const [key, value] of Object.entries(env)) {
+        newEnv += `${key}=${value}\n`
     }
     
-    fs.writeFile(__filename, modifiedData, 'utf8', e => {
+    fs.writeFile(__dirname + "/.env", newEnv, 'utf8', e => {
         if (e) {
         console.error(`  Error writing file:`, e)
         return
@@ -328,12 +330,6 @@ function Rewrite(alteredValue, newValue, logText, notString, callback) {
         if (logText) {
             console.log(logText)
         }
-        // exists to chain multiple rewrites correctly
-        // if they happen asyncronously, things break
-        if (callback) {
-            callback()
-        }
-    })
     })
 }
 

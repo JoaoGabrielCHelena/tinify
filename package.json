@@ -6,13 +6,11 @@
   "bin": {
     "tinify": "./tinify.js"
   },
-  "scripts": {
-    "start": "node tinify.js"
-  },
   "author": "João Gabriel Cardoso Helena",
   "license": "MIT",
   "dependencies": {
     "command-line-usage": "^7.0.1",
+    "dotenv": "^16.4.7",
     "tinify": "^1.7.1"
   }
 }
